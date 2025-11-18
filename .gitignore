@@ -1,0 +1,99 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log
+
+# Build / output
+dist/
+build/
+out/
+.public/
+.next/
+.nuxt/
+.ionic/
+.bundle/
+
+# Logs
+logs/
+*.log
+logs/*.log
+*.log.*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Test / coverage
+coverage/
+.nyc_output/
+test-reports/
+jest-results.xml
+
+# caches
+.cache/
+.parcel-cache/
+.pnp.*
+.pnp.js
+
+# Misc
+*.tgz
+*.zip
+*.tmp
+tmp/
+temp/
+
+# Mac specific
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv
+*/pyvenv.cfg
+*/bin/activate*
+*/bin/python*
+*/bin/pip*
+backend/#/
+backend/3.11/
+backend/3.12/
+backend/adjust/
+backend/if/
+backend/installed/
+backend/you/
+
+# Optional - add framework-specific items if used
+# React/CRA: /build
+# Angular: /dist
+# Next: /.next
+# Gatsby: /public/
