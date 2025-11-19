@@ -19,6 +19,19 @@ export interface AGUIChatState {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const LOG_AGUI_EVENTS = Boolean(import.meta.env.DEV || import.meta.env.VITE_AGUI_DEBUG === "true");
+
+const logAGUI = (message: string, payload?: unknown, level: "info" | "error" = "info") => {
+  if (!LOG_AGUI_EVENTS) {
+    return;
+  }
+  const prefix = `[AGUI] ${message}`;
+  if (payload === undefined) {
+    level === "error" ? console.error(prefix) : console.info(prefix);
+    return;
+  }
+  level === "error" ? console.error(prefix, payload) : console.info(prefix, payload);
+};
 
 const buildAgent = () => {
   const agent = new HttpAgent({
@@ -126,20 +139,25 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
       onRunInitialized: () => {
         set({ loading: true, error: undefined });
         syncMessagesFromAgent();
+        logAGUI("Run initialized", { threadId: get().threadId });
       },
       onRunFailed: ({ error }) => {
         set({ loading: false, error: error.message || "Agent run failed" });
+        logAGUI("Run failed", { message: error.message }, "error");
       },
       onRunFinalized: () => {
         set({ loading: false });
         syncMessagesFromAgent();
+        logAGUI("Run finalized", { totalMessages: get().agent.messages.length });
       },
       onNewMessage: () => {
         syncMessagesFromAgent();
+        logAGUI("Message snapshot synced", { totalMessages: get().agent.messages.length });
       },
       onTextMessageStartEvent: ({ event }) => {
         const eventRole = (event as { role?: string }).role;
         upsertMessage({ id: event.messageId, role: resolveRole(eventRole), content: "" });
+        logAGUI("Assistant message started", { messageId: event.messageId, role: eventRole });
       },
       onTextMessageContentEvent: ({ event, textMessageBuffer }) => {
         upsertMessage({ id: event.messageId, content: textMessageBuffer });
@@ -147,9 +165,11 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
       onTextMessageEndEvent: ({ event, textMessageBuffer }) => {
         upsertMessage({ id: event.messageId, content: textMessageBuffer });
         syncMessagesFromAgent();
+        logAGUI("Assistant message completed", { messageId: event.messageId, content: textMessageBuffer });
       },
       onMessagesSnapshotEvent: () => {
         syncMessagesFromAgent();
+        logAGUI("Messages snapshotted");
       },
       onToolCallStartEvent: ({ event }) => {
         toolInvocationsMap.set(event.toolCallId, {
@@ -158,6 +178,7 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
           status: "running",
         });
         updateToolInvocations();
+        logAGUI("Tool call started", { toolCallId: event.toolCallId, toolId: event.toolCallName });
       },
       onToolCallArgsEvent: ({ event, partialToolCallArgs }) => {
         const invocation = toolInvocationsMap.get(event.toolCallId);
@@ -168,6 +189,7 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
               : {};
           invocation.args = safeArgs as Record<string, unknown>;
           updateToolInvocations();
+          logAGUI("Tool call args patched", { toolCallId: event.toolCallId, args: invocation.args });
         }
       },
       onToolCallResultEvent: ({ event }) => {
@@ -192,6 +214,7 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
             console.error("Failed to parse TOOL_CALL_RESULT:", err);
           }
           updateToolInvocations();
+          logAGUI("Tool call result", { toolCallId: event.toolCallId, output: invocation.output });
         }
       },
       onToolCallEndEvent: ({ event }) => {
@@ -201,14 +224,17 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
             invocation.status = "succeeded";
           }
           updateToolInvocations();
+          logAGUI("Tool call ended", { toolCallId: event.toolCallId, status: invocation.status });
         }
       },
       onRunFinishedEvent: () => {
         set({ loading: false });
         syncMessagesFromAgent();
+        logAGUI("Run finished", { threadId: get().threadId });
       },
       onRunErrorEvent: ({ event }) => {
         set({ loading: false, error: event.message || "Agent error" });
+        logAGUI("Run error", { code: event.code, message: event.message }, "error");
       },
     };
   };
@@ -243,6 +269,7 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
         content: trimmed,
       });
       syncMessagesFromAgent();
+      logAGUI("Sending user message", { threadId, userMessageId, content: trimmed });
 
       set({
         loading: true,
@@ -257,12 +284,14 @@ const store: StateCreator<AGUIChatState, [], [], AGUIChatState> = (set, get) => 
       try {
         await agent.runAgent(undefined, createSubscriber(toolInvocationsMap));
         syncMessagesFromAgent();
+        logAGUI("Run completed", { threadId, totalMessages: agent.messages.length });
       } catch (error) {
         console.error("Agent run failed:", error);
         set({
           loading: false,
           error: error instanceof Error ? error.message : "Failed to send message",
         });
+        logAGUI("Agent run threw", error, "error");
       }
     },
 

@@ -47,6 +47,7 @@ function ToolRenderer({ toolInvocations }: ToolRendererProps) {
     "leave.applyForm": "Leave Application",
     "policy.showCard": "Policy Summary",
     "general.answer": "General Answer",
+    "weather.showCard": "Weather Snapshot",
   };
 
   return (

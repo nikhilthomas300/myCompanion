@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-import asyncio
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from . import interrupt_flag
+from core.interrupt_flag import interrupt_flag
 
 
 @dataclass
@@ -62,7 +62,7 @@ class GeminiClient:
         return self._fallback_text(prompt)
 
     async def decide(self, user_prompt: str, agent_options: dict[str, str]) -> GeminiDecision:
-        if interrupt_flag.interrupt_flag.is_triggered():
+        if interrupt_flag.is_triggered():
             raise InterruptedError("Conversation interrupted")
         if self._client and self._tools:
             decision = await self._call_gemini(user_prompt, agent_options)
@@ -73,8 +73,6 @@ class GeminiClient:
 
     async def _call_gemini(self, user_prompt: str, agent_options: dict[str, str]) -> GeminiDecision | None:
         try:
-            import google.generativeai as genai  # type: ignore
-
             sys_prompt = (
                 "You orchestrate company HR assistants. "
                 "Choose the best agent and tool. Always respond with a single JSON object "
@@ -145,6 +143,8 @@ class GeminiClient:
         normalized = user_prompt.lower()
         if any(keyword in normalized for keyword in ["leave", "vacation", "pto", "time off", "absence"]):
             tool = "leave.applyForm"
+        elif any(keyword in normalized for keyword in ["weather", "forecast", "temperature", "rain", "sunny", "snow", "climate"]):
+            tool = "weather.showCard"
         elif any(keyword in normalized for keyword in ["policy", "benefit", "rule", "handbook", "guideline"]):
             tool = "policy.showCard"
         else:

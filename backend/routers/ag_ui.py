@@ -33,6 +33,7 @@ AGENT_DESCRIPTIONS = {
     "general": "Answers open-ended HR questions directly with Gemini responses.",
     "policy": "Surfaces policy cards with structured UI components.",
     "leave": "Drafts leave requests and presents a leave workflow component.",
+    "weather": "Builds quick weather dashboards with short-term forecasts for office planning.",
 }
 
 

@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable
 from tools.general_tools import answer_general_question
 from tools.leave_tools import leave_apply_schema, leave_apply_tool
 from tools.policy_tools import policy_show_card_schema, policy_show_card_tool
+from tools.weather_tools import weather_card_schema, weather_card_tool
 
 ToolFunc = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
@@ -34,6 +35,10 @@ tool_registry: dict[str, dict[str, Any]] = {
                 "required": ["question"],
             },
         },
+    },
+    "weather.showCard": {
+        "func": weather_card_tool,
+        "schema": weather_card_schema(),
     },
 }
 
