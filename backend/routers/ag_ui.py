@@ -6,11 +6,12 @@ import uuid
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import StreamingResponse
 
 from core.gemini_client import GeminiClient
 from core.interrupt_flag import interrupt_flag
 from models.ag_ui_types import (
+    BaseEvent,
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
@@ -35,6 +36,11 @@ AGENT_DESCRIPTIONS = {
 }
 
 
+def _event_json(event: BaseEvent) -> str:
+    """Serialize an AG UI event, dropping null optional fields."""
+    return event.model_dump_json(by_alias=True, exclude_none=True)
+
+
 async def stream_agent_events(run_input: RunAgentInput) -> AsyncIterator[dict]:
     """Stream AG UI protocol events for an agent run."""
     thread_id = run_input.thread_id
@@ -44,11 +50,13 @@ async def stream_agent_events(run_input: RunAgentInput) -> AsyncIterator[dict]:
         # Emit RUN_STARTED
         yield {
             "event": "message",
-            "data": RunStartedEvent(
+            "data": _event_json(
+                RunStartedEvent(
                 threadId=thread_id,
                 runId=run_id,
                 parentRunId=run_input.parent_run_id
-            ).model_dump_json(by_alias=True)
+                )
+            )
         }
         
         if interrupt_flag.is_triggered():
@@ -72,19 +80,23 @@ async def stream_agent_events(run_input: RunAgentInput) -> AsyncIterator[dict]:
         tool_call_id = f"tool_{uuid.uuid4().hex[:8]}"
         yield {
             "event": "message",
-            "data": ToolCallStartEvent(
-                toolCallId=tool_call_id,
-                toolCallName=decision.tool_id
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                ToolCallStartEvent(
+                    toolCallId=tool_call_id,
+                    toolCallName=decision.tool_id
+                )
+            )
         }
 
         args_str = json.dumps(tool_args)
         yield {
             "event": "message",
-            "data": ToolCallArgsEvent(
-                toolCallId=tool_call_id,
-                delta=args_str
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                ToolCallArgsEvent(
+                    toolCallId=tool_call_id,
+                    delta=args_str
+                )
+            )
         }
 
         tool_payload = await tool_entry["func"](tool_args)
@@ -99,18 +111,22 @@ async def stream_agent_events(run_input: RunAgentInput) -> AsyncIterator[dict]:
         })
         yield {
             "event": "message",
-            "data": ToolCallResultEvent(
-                messageId=tool_result_message_id,
-                toolCallId=tool_call_id,
-                content=tool_result_content,
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                ToolCallResultEvent(
+                    messageId=tool_result_message_id,
+                    toolCallId=tool_call_id,
+                    content=tool_result_content,
+                )
+            )
         }
 
         yield {
             "event": "message",
-            "data": ToolCallEndEvent(
-                toolCallId=tool_call_id
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                ToolCallEndEvent(
+                    toolCallId=tool_call_id
+                )
+            )
         }
 
         response_text = (
@@ -123,10 +139,12 @@ async def stream_agent_events(run_input: RunAgentInput) -> AsyncIterator[dict]:
         message_id = f"msg_{uuid.uuid4().hex[:8]}"
         yield {
             "event": "message",
-            "data": TextMessageStartEvent(
-                messageId=message_id,
-                role="assistant"
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                TextMessageStartEvent(
+                    messageId=message_id,
+                    role="assistant"
+                )
+            )
         }
 
         chunk_size = 80
@@ -134,47 +152,81 @@ async def stream_agent_events(run_input: RunAgentInput) -> AsyncIterator[dict]:
             chunk = response_text[i:i + chunk_size]
             yield {
                 "event": "message",
-                "data": TextMessageContentEvent(
-                    messageId=message_id,
-                    delta=chunk
-                ).model_dump_json(by_alias=True)
+                "data": _event_json(
+                    TextMessageContentEvent(
+                        messageId=message_id,
+                        delta=chunk
+                    )
+                )
             }
 
         yield {
             "event": "message",
-            "data": TextMessageEndEvent(
-                messageId=message_id
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                TextMessageEndEvent(
+                    messageId=message_id
+                )
+            )
         }
 
         yield {
             "event": "message",
-            "data": RunFinishedEvent(
-                threadId=thread_id,
-                runId=run_id,
-                result={
-                    "toolCallId": tool_call_id,
-                    "toolId": decision.tool_id,
-                    "requiresHuman": bool(tool_payload.get("requires_human")),
-                },
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                RunFinishedEvent(
+                    threadId=thread_id,
+                    runId=run_id,
+                    result={
+                        "toolCallId": tool_call_id,
+                        "toolId": decision.tool_id,
+                        "requiresHuman": bool(tool_payload.get("requires_human")),
+                    },
+                )
+            )
         }
         
     except Exception as e:
         # Emit RUN_ERROR
         yield {
             "event": "message",
-            "data": RunErrorEvent(
-                message=str(e),
-                code="AGENT_ERROR"
-            ).model_dump_json(by_alias=True)
+            "data": _event_json(
+                RunErrorEvent(
+                    message=str(e),
+                    code="AGENT_ERROR"
+                )
+            )
         }
+
+
+def _format_sse(event: dict) -> bytes:
+    """Serialize an SSE event using LF-only delimiters expected by AG UI clients."""
+    event_name = event.get("event")
+    data_payload = event.get("data", "")
+    if not isinstance(data_payload, str):
+        data_payload = json.dumps(data_payload)
+
+    lines = []
+    if event_name:
+        lines.append(f"event: {event_name}")
+
+    data_lines = data_payload.splitlines() or [""]
+    for line in data_lines:
+        lines.append(f"data: {line}")
+
+    # SSE events end with a blank line; extra newline enforces the \n\n delimiter
+    lines.append("")
+    payload = "\n".join(lines) + "\n"
+    return payload.encode("utf-8")
+
+
+async def _agui_event_stream(run_input: RunAgentInput):
+    async for event in stream_agent_events(run_input):
+        yield _format_sse(event)
 
 
 @router.post("/run")
 async def run_agent(run_input: RunAgentInput):
     """Run an agent with AG UI protocol streaming via SSE."""
-    return EventSourceResponse(stream_agent_events(run_input))
+    return StreamingResponse(_agui_event_stream(run_input), media_type="text/event-stream")
 
 
 @router.get("/health")

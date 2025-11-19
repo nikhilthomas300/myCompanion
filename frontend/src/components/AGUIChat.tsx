@@ -55,7 +55,7 @@ export default function AGUIChat() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-[#f7f7f8]">
+    <div className="flex h-screen flex-col bg-slate-50">
       <header className="border-b border-gray-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
@@ -75,7 +75,7 @@ export default function AGUIChat() {
           <div className="flex-1 overflow-y-auto py-6 scrollbar-hide">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center space-y-5 text-center">
-                <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <p className="text-base font-semibold text-gray-900">Ready when you are</p>
                   <p className="mt-2 max-w-sm text-sm text-gray-500">
                     Ask anything about policies, leave planning, or benefits and My Companion will respond in seconds.
@@ -99,8 +99,8 @@ export default function AGUIChat() {
               </div>
             ) : (
               <div className="space-y-6">
-                {messages.map((message: ChatMessage, index: number) => (
-                  <MessageBubble key={`${message.role}-${index}`} message={message} index={index} />
+                {messages.filter((msg) => msg.role !== "tool" && msg.content?.trim()).map((message: ChatMessage, index: number) => (
+                  <MessageBubble key={message.id ?? `${message.role}-${index}`} message={message} index={index} />
                 ))}
                 {toolInvocations.length > 0 && <ToolRenderer toolInvocations={toolInvocations} />}
                 {loading && (
@@ -151,7 +151,7 @@ export default function AGUIChat() {
                 type="submit"
                 disabled={!input.trim()}
                 size="icon"
-                className="absolute bottom-3 right-3 h-9 w-9 rounded-xl bg-gray-900 text-white transition disabled:bg-gray-300"
+                className="absolute bottom-3 right-3 h-9 w-9 rounded-xl bg-emerald-600 text-white transition disabled:bg-gray-300"
               >
                 <Send className="h-4 w-4" />
               </Button>

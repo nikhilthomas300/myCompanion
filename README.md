@@ -1,151 +1,172 @@
-# Custom Agent UI (AG UI Protocol)
+# My Companion – HR Agent Playground
 
-A Gemini-powered HR companion with a React/Vite frontend, FastAPI backend, and a fully streaming **AG UI Protocol** bridge between them. The project now operates in a single, protocol-first mode: every chat round-trip is a POST to `/ag-ui/run` that streams structured events back to the browser via Server-Sent Events (SSE).
+A Gemini-powered HR companion built as two tightly coupled projects:
 
-## Highlights
-- **Real-time streaming** &mdash; SSE events are parsed incrementally in `frontend/src/api/agui.ts`, so text arrives chunk by chunk while Gemini is still thinking.
-- **Standard AG UI contract** &mdash; `models/ag_ui_types.py` mirrors the official schema, making it trivial to point the UI at any compliant backend by changing `VITE_API_BASE`.
-- **Custom HR components** &mdash; Tool responses can emit `componentId` plus `props`; the frontend resolves them through `registry/componentRegistry.ts` and renders React components such as the leave form or policy card.
-- **Single source of truth** &mdash; Legacy REST chat files have been removed. AG UI documentation is folded into this README so there is one place to start.
+- **FastAPI backend** (`backend/`) that accepts AG UI protocol runs at `/ag-ui/run`, orchestrates Gemini or fallback heuristics, calls structured HR tools, and streams Server-Sent Events (SSE) back to the caller.
+- **Vite/React frontend** (`frontend/`) that uses `@ag-ui/client`'s `HttpAgent` to post chat turns, consumes the streaming events in real time, and renders custom React components for each tool payload.
 
-## Project Layout (key files only)
+The AG UI protocol keeps the request/response contract identical to GitHub Copilot Agents, so you can point this UI at any compliant backend by flipping `VITE_API_BASE`.
 
-```
-backend/
-├── main.py                   # FastAPI app + router wiring
-├── routers/ag_ui.py          # SSE endpoint implementing AG UI events
-├── core/gemini_client.py     # Gemini orchestration + fallback logic
-├── models/ag_ui_types.py     # Typed RunAgentInput/BaseEvent models
-└── tools/*.py                # Tool payload builders (general, leave, policy)
+---
 
-frontend/
-├── src/api/agui.ts           # Streaming fetch client with resilient SSE parser
-├── src/state/aguiChatStore.ts# Zustand store translating AG UI events into UI state
-├── src/components/AGUIChat.tsx
-├── src/components/MessageBubble.tsx
-├── src/components/ToolRenderer.tsx
-├── src/registry/componentRegistry.ts
-└── src/tools/LeaveApplyForm.tsx, PolicyCard.tsx
-```
+## Architecture At A Glance
 
-## How Streaming Works
-1. The UI calls `runAGUIAgent` with a `RunAgentInput` packet (threadId, runId, prior messages, tool catalog info).
-2. `/ag-ui/run` immediately emits `RUN_STARTED`, `TOOL_CALL_*`, and then `TEXT_MESSAGE_*` events via `EventSourceResponse`.
-3. `frontend/src/api/agui.ts` keeps a rolling buffer while parsing `data:` lines so partial chunks never block the UI.
-4. `aguiChatStore` converts these events into chat bubbles, tool invocation cards, and loading states in real time.
+**Backend (FastAPI)**
+- `backend/main.py` boots FastAPI, wires routers, and loads `GEMINI_API_KEY` from `.env`.
+- `backend/routers/ag_ui.py` is the only chat surface: it reads `RunAgentInput`, streams AG UI events (RUN_*, TOOL_CALL_*, TEXT_MESSAGE_*), and terminates with `RunFinishedEvent` or `RunErrorEvent`.
+- `backend/core/gemini_client.py` picks the best tool (`general.answer`, `policy.showCard`, `leave.applyForm`) via Gemini or a rule-based fallback, then optionally drafts copy when tools need extra prose.
+- `backend/registry/tool_registry.py` exposes the callable tool set plus their JSON schemas.
+- `backend/tools/*` hold implementation logic—for instance, `policy_tools.py` renders policy cards, `leave_tools.py` drafts leave workflows, and `general_tools.py` is a pure text response helper.
 
-### Request Payload Example
+**Frontend (React + Zustand)**
+- `frontend/src/state/aguiChatStore.ts` wraps a single `HttpAgent`. It records outbound user messages, subscribes to each SSE event, normalizes them into `messages`, `toolInvocations`, and `artifacts`, and exposes `send`, `stopStreaming`, and `reset` helpers.
+- `frontend/src/components/AGUIChat.tsx` renders the chat shell, handles composer UX, and streams updates by observing the Zustand store.
+- `frontend/src/components/ToolRenderer.tsx` and `frontend/src/registry/componentRegistry.ts` resolve `componentId` values into actual React components (currently `LeaveApplyForm` and `PolicyCard`).
+- `frontend/src/tools/*.tsx` contain the bespoke UI widgets that appear whenever a backend tool returns `component_id` + `props`.
+
+---
+
+## Request & Streaming Flow
+
+1. **User input** – `AGUIChat` calls `useAGUIChatStore.getState().send(text)`.
+2. **Agent run creation** – `HttpAgent` (`frontend/src/state/aguiChatStore.ts`) generates a `RunAgentInput` payload containing the thread, run, messages, current tool catalog, and optional context, then POSTs it to `${VITE_API_BASE}/ag-ui/run`.
+3. **Backend orchestration** – `stream_agent_events` (`backend/routers/ag_ui.py`):
+   - Emits `RunStartedEvent` immediately.
+   - Asks `GeminiClient.decide(...)` which tool should run, based on `AGENT_DESCRIPTIONS`.
+   - Emits `ToolCallStartEvent`, `ToolCallArgsEvent`, then awaits the async tool function.
+   - Streams `ToolCallResultEvent` with serialized `componentId`, `props`, summaries, and artifacts.
+   - Streams the assistant text response via `TextMessageStartEvent`, multiple `TextMessageContentEvent` chunks, and `TextMessageEndEvent` for a typing effect.
+   - Finishes with `RunFinishedEvent` (or `RunErrorEvent` if anything raises), and HTTP closes.
+4. **Frontend hydration** – The store subscriber updates `messages`, sets tool state to `running/succeeded`, attaches parsed tool outputs, and toggles `loading` appropriately. `AGUIChat` and `ToolRenderer` react immediately, so the UI animates without manual polling.
+5. **Interrupts** – `stopStreaming()` aborts the underlying `fetch`/SSE request. `interrupt_flag` on the backend ensures cancelled conversations exit quickly.
+
+### Sample RunAgentInput (frontend → backend)
 
 ```json
 {
-   "threadId": "thread_1731951120",
-   "runId": "run_1731951120",
-   "messages": [
-      {
-         "id": "user_1731951120",
-         "role": "user",
-         "content": "What is the parental leave policy?"
-      }
-   ],
-   "tools": [],
-   "context": [],
-   "state": null
+  "threadId": "thread_1731951120",
+  "runId": "run_1731951120",
+  "messages": [
+    { "id": "user_1731951120", "role": "user", "content": "Summarize our parental leave policy." }
+  ],
+  "tools": [],
+  "context": [],
+  "state": null
 }
 ```
 
-### Streamed Event Sample
-
+### SSE Event Fragments (backend → frontend)
 ```
 event: message
 data: {"type":"RUN_STARTED","threadId":"thread_1731951120","runId":"run_1731951120"}
 
 event: message
-data: {"type":"TOOL_CALL_START","toolCallId":"tool_ed31e7c8","toolCallName":"policy.showCard"}
+data: {"type":"TOOL_CALL_START","toolCallId":"tool_4e7a5d2a","toolCallName":"policy.showCard"}
 
 event: message
-data: {"type":"TOOL_CALL_RESULT","toolCallId":"tool_ed31e7c8","content":"{\"componentId\":\"policy.showCard\",\"props\":{...}}"}
+data: {"type":"TOOL_CALL_RESULT","toolCallId":"tool_4e7a5d2a","content":"{\"componentId\":\"policy.showCard\",\"props\":{...}}"}
 
 event: message
-data: {"type":"TEXT_MESSAGE_START","messageId":"msg_a2fbc8"}
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg_6a424917","delta":"Primary caregivers receive 16 weeks paid leave..."}
 
 event: message
-data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg_a2fbc8","delta":"Our parental leave policy offers..."}
-
-event: message
-data: {"type":"TEXT_MESSAGE_END","messageId":"msg_a2fbc8"}
-
-event: message
-data: {"type":"RUN_FINISHED","threadId":"thread_1731951120","runId":"run_1731951120"}
+data: {"type":"RUN_FINISHED","threadId":"thread_1731951120","runId":"run_1731951120","result":{"toolCallId":"tool_4e7a5d2a","toolId":"policy.showCard"}}
 ```
 
-## Custom Component Triggering
+---
 
-Tools return structured payloads to the router:
+## Project Map
 
-```python
-return {
-   "message": "You qualify for 16 weeks paid leave.",
-   "component_id": "policy.showCard",
-   "props": {
-      "title": "Parental Leave",
-      "summary": "16 weeks paid leave for primary caregivers.",
-      "links": [{"label": "View policy", "href": "https://hr/policies/parental"}]
-   },
-   "artifacts": [],
-   "requires_human": False
-}
+```
+backend/
+  main.py                FastAPI entrypoint + CORS
+  routers/
+    ag_ui.py             SSE endpoint implementing AG UI protocol
+    interrupt.py         User-triggered cancellation hooks
+    human.py             Optional human-in-the-loop stub
+    feedback.py          Thumb/feedback ingestion stub
+  core/
+    gemini_client.py     Gemini tool selection + response generation
+    interrupt_flag.py    Global interrupt state shared across requests
+  tools/
+    general_tools.py     Plain-language replies
+    leave_tools.py       Leave workflow payload and schema
+    policy_tools.py      Policy card payload and schema
+  registry/
+    tool_registry.py     Tool metadata + lookup helpers
+
+frontend/
+  src/state/aguiChatStore.ts   Zustand store + HttpAgent wiring
+  src/components/*.tsx         Chat surface, message bubbles, tool renderer
+  src/tools/*.tsx              React components rendered for tool outputs
+  src/registry/componentRegistry.ts  componentId → React component map
 ```
 
-`ToolRenderer` reads the `componentId`, looks it up in `componentRegistry.ts`, and renders the matching React component. Add new UI by dropping a component under `src/tools/`, registering it, and returning its id from any tool.
+---
 
-## Running Locally
+## Getting Started
+
+### 1. Backend (FastAPI + Gemini)
 
 ```bash
-# 1. Backend (FastAPI + Gemini)
 cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-# create backend/.env and add GEMINI_API_KEY=...
+cp .env.example .env  # if you keep a template
+# edit .env to include GEMINI_API_KEY=<your key>
 python -m uvicorn main:app --reload --port 8000
+```
 
-# 2. Frontend (Vite dev server)
-cd ../frontend
+- Health check: `curl http://localhost:8000/health`
+- Primary SSE endpoint: `POST http://localhost:8000/ag-ui/run`
+
+### 2. Frontend (Vite + React)
+
+```bash
+cd frontend
 npm install
+cp .env.example .env.local  # optional helper
+# ensure VITE_API_BASE=http://localhost:8000
 npm run dev
 ```
 
-- Default backend URL: `http://localhost:8000`
-- Override in the UI by setting `VITE_API_BASE` in `frontend/.env.local`.
+- Visit `http://localhost:5173/` and start chatting. The UI streams tool output as soon as the backend emits events.
 
-## Environment Variables
+### Environment Variables
 
-`backend/.env`
-```
-GEMINI_API_KEY=your_key
-# optional overrides
-GEMINI_MODEL=gemini-2.5-pro
-```
-
-`frontend/.env.local`
-```
-VITE_API_BASE=http://localhost:8000
-```
-
-## Troubleshooting
-- **No streaming or big delay** &mdash; ensure `/ag-ui/run` logs show events; the SSE parser now buffers partial chunks, so any remaining delay usually means Gemini is still generating.
-- **CORS errors** &mdash; adjust `allow_origins` inside `backend/main.py` when pointing to remote servers.
-- **Tool UI missing** &mdash; confirm the tool emits `component_id` that exists in `componentRegistry.ts`; otherwise `ToolRenderer` renders a fallback card.
-- **Stop button stuck** &mdash; call `stopStreaming` in the store, which aborts the fetch and resets `loading`.
-
-## Extending the System
-1. **Add a new tool** under `backend/tools/` and register it inside `registry/tool_registry.py`.
-2. **Emit UI** by returning `component_id` + `props` to match the registry key.
-3. **Stream richer events** by yielding additional AG UI event types (e.g., `MESSAGES_SNAPSHOT`, `MESSAGE_METADATA`) from `stream_agent_events`.
-
-## License
-Educational use only.
+| File | Key | Description |
+| --- | --- | --- |
+| `backend/.env` | `GEMINI_API_KEY` | Google Generative AI key; required for live Gemini calls. |
+| `backend/.env` | `GEMINI_MODEL` (optional) | Overrides the model name (default `gemini-2.5-flash`). |
+| `frontend/.env.local` | `VITE_API_BASE` | Base URL for the backend (defaults to `http://localhost:8000`). |
 
 ---
 
-Built with React, Vite, Tailwind, Zustand, FastAPI, and Gemini 2.5.
+## Extending The System
+
+1. **Add a backend tool**
+   - Implement async logic in `backend/tools/<new_tool>.py` returning `{ message, component_id, props, artifacts?, requires_human? }`.
+   - Provide a JSON schema (see `leave_apply_schema()` for reference).
+   - Register it in `backend/registry/tool_registry.py` and describe it in `AGENT_DESCRIPTIONS` inside `ag_ui.py` so `GeminiClient` can pick it.
+
+2. **Expose a new React component**
+   - Create a component in `frontend/src/tools/YourComponent.tsx`.
+   - Add it to `frontend/src/registry/componentRegistry.ts` with a matching `componentId`.
+   - When your backend tool returns that `component_id`, `ToolRenderer` will hydrate it automatically.
+
+3. **Customize the chat surface**
+   - `AGUIChat.tsx` controls layout and composer shortcuts.
+   - `MessageBubble.tsx` handles streaming markdown rendering; extend it for citations or avatars.
+
+---
+
+## Troubleshooting & Tips
+
+- **SSE never resolves** – Check backend logs for exceptions. `stream_agent_events` always emits `RunErrorEvent` before closing; unhandled errors usually mean the client disconnected early.
+- **Tool UI never appears** – Ensure the backend returns a `component_id` that exists in `componentRegistry.ts`. Missing entries are silently ignored today.
+- **Gemini unavailable** – Without `GEMINI_API_KEY`, `GeminiClient` falls back to keyword heuristics and templated responses; add the key to regain smart routing.
+- **Interrupt button stuck** – The frontend calls `HttpAgent.abortRun()`. Confirm the backend honors `interrupt_flag.is_triggered()` (triggered by `/interrupt` router) if you extend cancellation semantics.
+- **CORS errors** – Update `allow_origins` in `backend/main.py` to the actual frontend origin for production.
+
+Happy building! Tinker with new HR workflows, richer tool payloads, or alternative LLM providers while the AG UI protocol keeps your request/response plumbing consistent.

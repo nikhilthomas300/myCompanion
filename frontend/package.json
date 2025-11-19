@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ag-ui/client": "^0.0.41",
     "@ag-ui/core": "^0.0.41",
     "@agentic/core": "^8.4.4",
     "@agentic/stdlib": "^7.6.9",

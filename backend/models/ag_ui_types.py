@@ -111,14 +111,13 @@ class ToolCallResultEvent(BaseEvent):
     message_id: str = Field(..., alias="messageId")
     tool_call_id: str = Field(..., alias="toolCallId")
     content: str
-    role: Optional[Literal["tool"]] = "tool"
 
 
 class AGUIMessage(BaseModel):
     """AG UI message format."""
     id: str
     role: Literal["developer", "system", "assistant", "user", "tool", "activity"]
-    content: str
+    content: Optional[Any] = None
     name: Optional[str] = None
     tool_call_id: Optional[str] = Field(None, alias="toolCallId")
     tool_calls: Optional[list[dict[str, Any]]] = Field(None, alias="toolCalls")
