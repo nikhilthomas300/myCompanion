@@ -12,25 +12,35 @@ function ToolActions({ content }: { content: string }) {
 
   return (
     <>
-      <Button variant="ghost" size="icon" onClick={() => setLiked((s) => (s === true ? null : true))}>
-        <ThumbsUp className={cn("h-4 w-4", liked ? "text-emerald-600" : "text-slate-400")} />
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        className="h-8 w-8 rounded-full hover:bg-secondary"
+        onClick={() => setLiked((s) => (s === true ? null : true))}
+      >
+        <ThumbsUp className={cn("h-3.5 w-3.5 transition-colors", liked ? "text-primary fill-primary/20" : "text-muted-foreground")} />
       </Button>
-      <Button variant="ghost" size="icon" onClick={() => setLiked((s) => (s === false ? null : false))}>
-        <ThumbsDown className={cn("h-4 w-4", liked === false ? "text-rose-600" : "text-slate-400")} />
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        className="h-8 w-8 rounded-full hover:bg-secondary"
+        onClick={() => setLiked((s) => (s === false ? null : false))}
+      >
+        <ThumbsDown className={cn("h-3.5 w-3.5 transition-colors", liked === false ? "text-destructive fill-destructive/20" : "text-muted-foreground")} />
       </Button>
       <Button
         variant="ghost"
         size="icon"
+        className="h-8 w-8 rounded-full hover:bg-secondary"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(content);
-            alert("Copied tool output");
           } catch {
-            alert("Couldn't copy");
+            // Ignore error
           }
         }}
       >
-        <Copy className="h-4 w-4 text-slate-500" />
+        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
       </Button>
     </>
   );
@@ -51,7 +61,7 @@ function ToolRenderer({ toolInvocations }: ToolRendererProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 py-2">
       {toolInvocations.map((invocation, index) => {
         const componentKey = invocation.output?.componentId;
         
@@ -68,17 +78,19 @@ function ToolRenderer({ toolInvocations }: ToolRendererProps) {
         }
 
         return (
-          <div key={`${componentKey}-${index}`} className="flex justify-start">
-            <div className="max-w-[100%] rounded-3xl bg-white/90 p-4 shadow-sm ring-1 ring-slate-200">
-              <div className="flex items-center justify-between">
+          <div key={`${componentKey}-${index}`} className="flex justify-start animate-fade-in">
+            <div className="w-full max-w-[100%] overflow-hidden rounded-[1.5rem] rounded-tl-sm border border-border/50 bg-white/80 p-5 shadow-medium backdrop-blur-sm transition-all hover:shadow-lg hover:bg-white">
+              <div className="mb-4 flex items-center justify-between border-b border-border/30 pb-3">
                 <div className="flex items-center gap-3">
-                  <Badge variant="outline">Tool: {TOOL_NAMES[invocation.toolId] ?? invocation.toolId}</Badge>
+                  <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
+                    {TOOL_NAMES[invocation.toolId] ?? invocation.toolId}
+                  </Badge>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <ToolActions content={JSON.stringify(invocation.output?.props ?? {}, null, 2)} />
                 </div>
               </div>
-              <div className="mt-3">
+              <div className="mt-2">
                 <Component props={invocation.output?.props ?? {}} />
               </div>
             </div>

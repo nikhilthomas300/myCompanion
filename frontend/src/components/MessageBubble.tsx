@@ -18,54 +18,65 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const toolName = message.metadata?.name as string | undefined;
 
   return (
-    <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
-    >
+    <div className={cn("flex w-full animate-fade-in", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[100%] rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm",
+          "max-w-[85%] px-4 py-3 text-sm leading-relaxed shadow-sm transition-all",
           isUser
-            ? "bg-emerald-600 text-white"
-            : "bg-white text-slate-900 border border-slate-200"
+            ? "rounded-2xl rounded-tr-sm bg-primary text-primary-foreground shadow-md"
+            : "rounded-2xl rounded-tl-sm bg-white text-foreground border border-border/40 shadow-soft"
         )}
       >
         {isUser ? (
-          <p className="whitespace-pre-line">{message.content}</p>
+          <p className="whitespace-pre-line font-medium">{message.content}</p>
         ) : (
           <>
             {toolName && (
-              <div className="mb-2 flex items-center gap-2">
-                <div className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{toolName}</div>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground uppercase tracking-wider">
+                  {toolName}
+                </div>
               </div>
             )}
-          <div className="prose prose-sm max-w-none text-slate-900 prose-headings:text-slate-900 prose-code:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-          </div>
+            <div className="prose prose-sm max-w-none text-foreground prose-headings:font-display prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-code:text-xs prose-code:bg-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            </div>
           </>
         )}
         {isAssistant && (
-          <div className="mt-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => setLiked((s) => (s === true ? null : true))}>
-                <ThumbsUp className={cn("h-4 w-4", liked ? "text-emerald-600" : "text-slate-400")} />
+          <div className="mt-4 flex items-center justify-between border-t border-border/30 pt-2">
+            <div className="flex items-center gap-1">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-full hover:bg-secondary"
+                onClick={() => setLiked((s) => (s === true ? null : true))}
+              >
+                <ThumbsUp className={cn("h-3.5 w-3.5 transition-colors", liked ? "text-primary fill-primary/20" : "text-muted-foreground")} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => setLiked((s) => (s === false ? null : false))}>
-                <ThumbsDown className={cn("h-4 w-4", liked === false ? "text-rose-600" : "text-slate-400")} />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-full hover:bg-secondary"
+                onClick={() => setLiked((s) => (s === false ? null : false))}
+              >
+                <ThumbsDown className={cn("h-3.5 w-3.5 transition-colors", liked === false ? "text-destructive fill-destructive/20" : "text-muted-foreground")} />
               </Button>
             </div>
             <div>
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-8 w-8 rounded-full hover:bg-secondary"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(message.content);
-                    alert("Copied to clipboard");
                   } catch {
-                    alert("Couldn't copy");
+                    // Ignore error
                   }
                 }}
               >
-                <Copy className="h-4 w-4 text-slate-500" />
+                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
               </Button>
             </div>
           </div>

@@ -55,61 +55,83 @@ export default function AGUIChat() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-slate-50">
-      <header className="border-b border-gray-200 bg-white/90 backdrop-blur">
+    <div className="flex h-screen flex-col bg-background font-sans text-foreground selection:bg-primary/10">
+      {/* Header */}
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-xl transition-all">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-sky-500 text-white font-semibold">
-              MC
+          <div className="flex items-center gap-4">
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-indigo-600 text-white shadow-lg shadow-primary/20 ring-1 ring-white/20">
+              <span className="font-display text-lg font-bold tracking-tight">MC</span>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">MY COMPANION</h1>
-              <p className="text-xs text-gray-500">Powered by AG UI Protocol</p>
+              <h1 className="font-display text-xl font-bold tracking-tight text-foreground">My Companion</h1>
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></span>
+                <p className="text-xs font-medium text-muted-foreground">AG UI Protocol Active</p>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden">
-        <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4">
-          <div className="flex-1 overflow-y-auto py-6 scrollbar-hide">
+      <main className="flex-1 overflow-hidden relative">
+        {/* Decorative background elements */}
+        <div className="pointer-events-none absolute inset-0 flex justify-center overflow-hidden opacity-30">
+          <div className="h-[500px] w-[500px] rounded-full bg-primary/5 blur-[100px]" />
+        </div>
+
+        <div className="relative mx-auto flex h-full w-full max-w-3xl flex-col px-4">
+          <div className="flex-1 overflow-y-auto py-8 scrollbar-hide">
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center space-y-5 text-center">
-                <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                  <p className="text-base font-semibold text-gray-900">Ready when you are</p>
-                  <p className="mt-2 max-w-sm text-sm text-gray-500">
-                    Ask anything about policies, leave planning, or benefits and My Companion will respond in seconds.
+              <div className="flex h-full flex-col items-center justify-center space-y-8 text-center animate-fade-in">
+                <div className="relative rounded-[2rem] bg-white/50 p-8 shadow-soft ring-1 ring-border/50 backdrop-blur-sm">
+                  <div className="mb-4 inline-flex items-center justify-center rounded-xl bg-primary/10 p-3 text-primary">
+                    <div className="h-6 w-6 rounded-full border-2 border-current opacity-60" />
+                  </div>
+                  <h2 className="font-display text-2xl font-semibold text-foreground">Ready to assist</h2>
+                  <p className="mt-3 max-w-md text-base leading-relaxed text-muted-foreground">
+                    Ask anything about policies, leave planning, or benefits. I'm here to help simplify your work life.
                   </p>
                 </div>
-                <div className="grid w-full gap-3 sm:grid-cols-2">
-                  {["Summarize the parental leave policy","Draft a response for an employee query","Help me compare PTO options","What approvals do I need for sabbatical?"].map((suggestion) => (
+                
+                <div className="grid w-full gap-4 sm:grid-cols-2">
+                  {[
+                    "Summarize the parental leave policy",
+                    "Draft a response for an employee query",
+                    "Help me compare PTO options",
+                    "What approvals do I need for sabbatical?"
+                  ].map((suggestion, i) => (
                     <button
                       key={suggestion}
                       type="button"
+                      style={{ animationDelay: `${i * 100}ms` }}
                       onClick={() => {
                         setInput(suggestion);
                         textareaRef.current?.focus();
                       }}
-                      className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left text-sm text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+                      className="group relative animate-fade-in-up overflow-hidden rounded-2xl border border-border/60 bg-white/60 px-5 py-4 text-left text-sm font-medium text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-white hover:shadow-medium"
                     >
-                      {suggestion}
+                      <span className="relative z-10">{suggestion}</span>
+                      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/0 to-primary/5 opacity-0 transition-opacity group-hover:opacity-100" />
                     </button>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-5 pb-4">
                 {messages.filter((msg) => msg.role !== "tool" && msg.content?.trim()).map((message: ChatMessage, index: number) => (
                   <MessageBubble key={message.id ?? `${message.role}-${index}`} message={message} index={index} />
                 ))}
                 {toolInvocations.length > 0 && <ToolRenderer toolInvocations={toolInvocations} />}
                 {loading && (
-                  <div className="flex justify-start">
-                    <div className="flex items-center gap-2 rounded-3xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm">
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "0ms" }} />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "150ms" }} />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "300ms" }} />
-                      <span className="pl-1">My Companion is typing…</span>
+                  <div className="flex justify-start animate-fade-in">
+                    <div className="flex items-center gap-2 rounded-2xl border border-border bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+                      <div className="flex gap-1">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60" style={{ animationDelay: "0ms" }} />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60" style={{ animationDelay: "150ms" }} />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60" style={{ animationDelay: "300ms" }} />
+                      </div>
+                      <span className="pl-2 text-xs font-medium text-muted-foreground">Thinking...</span>
                     </div>
                   </div>
                 )}
@@ -120,44 +142,51 @@ export default function AGUIChat() {
         </div>
       </main>
 
-      <div className="border-t border-gray-200 bg-white/95">
-        <div className="mx-auto w-full max-w-3xl px-4 py-4">
+      {/* Input Area - Floating Design */}
+      <div className="relative z-20">
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
+        <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-2">
           {error && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700 shadow-sm">
-              <strong className="font-medium">Heads up:</strong> {error}
+            <div className="mb-4 animate-fade-in rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700 shadow-sm backdrop-blur-sm">
+              <strong className="font-semibold">Error:</strong> {error}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="relative">
+          
+          <form onSubmit={handleSubmit} className="relative flex items-end gap-2 rounded-[2rem] bg-white p-2 shadow-medium ring-1 ring-border/60 transition-shadow focus-within:ring-primary/20 focus-within:shadow-lg">
             <Textarea
               ref={textareaRef}
-              placeholder="Message My Companion"
+              placeholder="Message My Companion..."
               value={input}
               onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setInput(event.target.value)}
               onKeyDown={handleKeyDown}
-              className="min-h-[64px] max-h-[220px] resize-none rounded-2xl border-gray-200 bg-white pr-12 text-base shadow-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400"
+              className="min-h-[52px] max-h-[200px] w-full resize-none border-0 bg-transparent px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
               rows={1}
             />
-            {loading ? (
-              <Button
-                type="button"
-                onClick={handleStop}
-                size="icon"
-                className="absolute bottom-3 right-3 h-9 w-9 rounded-xl bg-gray-900 text-white hover:bg-gray-800"
-              >
-                <Square className="h-4 w-4" />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                disabled={!input.trim()}
-                size="icon"
-                className="absolute bottom-3 right-3 h-9 w-9 rounded-xl bg-emerald-600 text-white transition disabled:bg-gray-300"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            )}
+            <div className="pb-1 pr-1">
+              {loading ? (
+                <Button
+                  type="button"
+                  onClick={handleStop}
+                  size="icon"
+                  className="h-10 w-10 rounded-full bg-foreground text-background shadow-sm hover:bg-foreground/90"
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={!input.trim()}
+                  size="icon"
+                  className="h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:shadow-lg hover:scale-105 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:scale-100"
+                >
+                  <Send className="h-4 w-4 ml-0.5" />
+                </Button>
+              )}
+            </div>
           </form>
-          <p className="mt-2 text-center text-xs text-gray-500">Responses can contain errors. Please verify critical information.</p>
+          <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground/60">
+            AI-generated content may be incorrect.
+          </p>
         </div>
       </div>
     </div>
